@@ -130,6 +130,63 @@
             '';
           };
 
+          nkg-status = pkgs.writeShellApplication {
+            name = "nkg-status";
+            runtimeInputs = [
+              pkgs.docker
+              pkgs.sqlite
+              pkgs.coreutils
+            ];
+            text = ''
+              NKG_DATA="''${XDG_DATA_HOME:-$HOME/.local/share}/nix-knowledge-graph"
+
+              echo "nix-knowledge-graph"
+              echo ""
+
+              # TypeDB
+              if docker ps --format '{{.Names}}' 2>/dev/null | grep -q nkg-typedb; then
+                UPTIME=$(docker inspect --format '{{.State.StartedAt}}' nkg-typedb 2>/dev/null || echo "unknown")
+                echo "  TypeDB:    running (since $UPTIME)"
+              elif docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q nkg-typedb; then
+                echo "  TypeDB:    stopped"
+              else
+                echo "  TypeDB:    not created"
+              fi
+
+              # rippkgs index
+              RIPPKGS_DB="$NKG_DATA/rippkgs-index.sqlite"
+              if [ -f "$RIPPKGS_DB" ]; then
+                PKG_COUNT=$(sqlite3 "$RIPPKGS_DB" "SELECT COUNT(*) FROM packages;" 2>/dev/null || echo "?")
+                SIZE=$(du -h "$RIPPKGS_DB" | cut -f1)
+                echo "  Packages:  $PKG_COUNT ($SIZE)"
+              else
+                echo "  Packages:  not indexed"
+              fi
+
+              # tldr
+              TLDR_DIR="$NKG_DATA/tldr"
+              if [ -d "$TLDR_DIR/pages" ]; then
+                PAGE_COUNT=$(find "$TLDR_DIR/pages" -name '*.md' | wc -l | tr -d ' ')
+                echo "  tldr:      $PAGE_COUNT pages"
+              else
+                echo "  tldr:      not fetched"
+              fi
+
+              # Python venv
+              if [ -d "$NKG_DATA/.venv" ]; then
+                echo "  venv:      ok"
+              else
+                echo "  venv:      not created"
+              fi
+
+              echo ""
+              echo "  Data:      $NKG_DATA"
+              echo ""
+              echo "  nix run .#setup   set up / ingest"
+              echo "  nix run .#stop    stop TypeDB"
+            '';
+          };
+
           nkg-stop = pkgs.writeShellApplication {
             name = "nkg-stop";
             runtimeInputs = [ pkgs.docker ];
@@ -143,7 +200,11 @@
         {
           default = {
             type = "app";
-            program = "${nkg-setup}/bin/nkg-setup";
+            program = "${nkg-status}/bin/nkg-status";
+          };
+          status = {
+            type = "app";
+            program = "${nkg-status}/bin/nkg-status";
           };
           setup = {
             type = "app";
