@@ -136,53 +136,131 @@
               pkgs.docker
               pkgs.sqlite
               pkgs.coreutils
+              pkgs.procps
+              pkgs.gnugrep
             ];
             text = ''
               NKG_DATA="''${XDG_DATA_HOME:-$HOME/.local/share}/nix-knowledge-graph"
 
               echo "nix-knowledge-graph"
+              echo "==================="
               echo ""
 
-              # TypeDB
-              if docker ps --format '{{.Names}}' 2>/dev/null | grep -q nkg-typedb; then
-                UPTIME=$(docker inspect --format '{{.State.StartedAt}}' nkg-typedb 2>/dev/null || echo "unknown")
-                echo "  TypeDB:    running (since $UPTIME)"
-              elif docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q nkg-typedb; then
-                echo "  TypeDB:    stopped"
+              # --- Docker ---
+              if ! command -v docker &>/dev/null; then
+                echo "  Docker:      not installed"
+              elif ! docker info &>/dev/null; then
+                echo "  Docker:      not running"
               else
-                echo "  TypeDB:    not created"
+                echo "  Docker:      ok"
               fi
 
-              # rippkgs index
+              # --- TypeDB ---
+              if docker ps --format '{{.Names}}' 2>/dev/null | grep -q nkg-typedb; then
+                STARTED=$(docker inspect --format '{{.State.StartedAt}}' nkg-typedb 2>/dev/null)
+                STATUS=$(docker inspect --format '{{.State.Status}}' nkg-typedb 2>/dev/null)
+                HEALTH=""
+                # Check if TypeDB is actually accepting connections
+                if docker exec nkg-typedb bash -c "echo ok" &>/dev/null; then
+                  HEALTH="healthy"
+                else
+                  HEALTH="starting"
+                fi
+                MEM=$(docker stats --no-stream --format '{{.MemUsage}}' nkg-typedb 2>/dev/null || echo "?")
+                echo "  TypeDB:      $STATUS ($HEALTH) since $STARTED"
+                echo "               mem: $MEM"
+              elif docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q nkg-typedb; then
+                EXIT_CODE=$(docker inspect --format '{{.State.ExitCode}}' nkg-typedb 2>/dev/null || echo "?")
+                echo "  TypeDB:      stopped (exit $EXIT_CODE)"
+              else
+                echo "  TypeDB:      not created"
+              fi
+
+              echo ""
+
+              # --- rippkgs index ---
               RIPPKGS_DB="$NKG_DATA/rippkgs-index.sqlite"
               if [ -f "$RIPPKGS_DB" ]; then
                 PKG_COUNT=$(sqlite3 "$RIPPKGS_DB" "SELECT COUNT(*) FROM packages;" 2>/dev/null || echo "?")
+                WITH_DESC=$(sqlite3 "$RIPPKGS_DB" "SELECT COUNT(*) FROM packages WHERE description IS NOT NULL AND description != '''';" 2>/dev/null || echo "?")
+                WITH_DEPS=$(sqlite3 "$RIPPKGS_DB" "SELECT COUNT(*) FROM packages WHERE propagatedBuildInputs IS NOT NULL;" 2>/dev/null || echo "?")
                 SIZE=$(du -h "$RIPPKGS_DB" | cut -f1)
-                echo "  Packages:  $PKG_COUNT ($SIZE)"
+                MTIME=$(stat -c '%Y' "$RIPPKGS_DB" 2>/dev/null || stat -f '%m' "$RIPPKGS_DB" 2>/dev/null)
+                AGE=$(( $(date +%s) - MTIME ))
+                if [ "$AGE" -lt 3600 ]; then
+                  AGE_STR="$((AGE / 60))m ago"
+                elif [ "$AGE" -lt 86400 ]; then
+                  AGE_STR="$((AGE / 3600))h ago"
+                else
+                  AGE_STR="$((AGE / 86400))d ago"
+                fi
+                echo "  Packages:    $PKG_COUNT total, $WITH_DESC with descriptions, $WITH_DEPS with deps ($SIZE, indexed $AGE_STR)"
               else
-                echo "  Packages:  not indexed"
+                echo "  Packages:    not indexed"
               fi
 
-              # tldr
+              # Check if rippkgs-index is currently running
+              if pgrep -f "rippkgs-index" > /dev/null 2>&1; then
+                PID=$(pgrep -f "rippkgs-index" | head -1)
+                ELAPSED=$(ps -o etime= -p "$PID" 2>/dev/null | tr -d ' ')
+                # Check if partial output exists
+                PARTIAL="$NKG_DATA/rippkgs-index.sqlite"
+                if [ -f "$PARTIAL" ]; then
+                  PARTIAL_SIZE=$(du -h "$PARTIAL" | cut -f1)
+                  echo "               INDEXING in progress (pid $PID, elapsed $ELAPSED, $PARTIAL_SIZE so far)"
+                else
+                  echo "               INDEXING in progress (pid $PID, elapsed $ELAPSED, evaluating nixpkgs...)"
+                fi
+              fi
+
+              # --- tldr ---
               TLDR_DIR="$NKG_DATA/tldr"
               if [ -d "$TLDR_DIR/pages" ]; then
-                PAGE_COUNT=$(find "$TLDR_DIR/pages" -name '*.md' | wc -l | tr -d ' ')
-                echo "  tldr:      $PAGE_COUNT pages"
+                TOTAL=$(find "$TLDR_DIR/pages" -name '*.md' | wc -l | tr -d ' ')
+                COMMON=$(find "$TLDR_DIR/pages/common" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+                LINUX=$(find "$TLDR_DIR/pages/linux" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+                OSX=$(find "$TLDR_DIR/pages/osx" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+                echo "  tldr:        $TOTAL pages (common: $COMMON, linux: $LINUX, osx: $OSX)"
               else
-                echo "  tldr:      not fetched"
+                echo "  tldr:        not fetched"
               fi
 
-              # Python venv
-              if [ -d "$NKG_DATA/.venv" ]; then
-                echo "  venv:      ok"
+              # Check if git clone for tldr is in progress
+              if pgrep -f "git.*clone.*tldr" > /dev/null 2>&1; then
+                echo "               CLONING in progress..."
+              fi
+
+              # --- Python venv ---
+              VENV="$NKG_DATA/.venv"
+              if [ -d "$VENV" ]; then
+                TYPEDB_VER=$("$VENV/bin/pip" show typedb-driver 2>/dev/null | grep "^Version:" | cut -d' ' -f2 || echo "?")
+                echo "  venv:        ok (typedb-driver $TYPEDB_VER)"
               else
-                echo "  venv:      not created"
+                echo "  venv:        not created"
+              fi
+
+              # --- Ingest processes ---
+              if pgrep -f "ingest/rippkgs.py" > /dev/null 2>&1; then
+                PID=$(pgrep -f "ingest/rippkgs.py" | head -1)
+                ELAPSED=$(ps -o etime= -p "$PID" 2>/dev/null | tr -d ' ')
+                echo "  Ingest:      rippkgs.py running (pid $PID, elapsed $ELAPSED)"
+              elif pgrep -f "ingest/tldr.py" > /dev/null 2>&1; then
+                PID=$(pgrep -f "ingest/tldr.py" | head -1)
+                ELAPSED=$(ps -o etime= -p "$PID" 2>/dev/null | tr -d ' ')
+                echo "  Ingest:      tldr.py running (pid $PID, elapsed $ELAPSED)"
+              else
+                echo "  Ingest:      idle"
+              fi
+
+              # --- Disk ---
+              if [ -d "$NKG_DATA" ]; then
+                TOTAL_SIZE=$(du -sh "$NKG_DATA" 2>/dev/null | cut -f1)
+                echo ""
+                echo "  Data:        $NKG_DATA ($TOTAL_SIZE)"
               fi
 
               echo ""
-              echo "  Data:      $NKG_DATA"
-              echo ""
-              echo "  nix run .#setup   set up / ingest"
+              echo "  nix run .#setup   set up / ingest all sources"
               echo "  nix run .#stop    stop TypeDB"
             '';
           };
