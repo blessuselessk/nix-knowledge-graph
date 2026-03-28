@@ -1,0 +1,22 @@
+define
+
+# If a package provides a command, and that command has documentation,
+# then the package is also documented by that documentation.
+rule package-documented-via-command:
+    when {
+        (provider: $pkg, artifact: $cmd) isa provides;
+        (documentation: $doc, subject: $cmd) isa documents;
+    } then {
+        (documentation: $doc, subject: $pkg) isa documents;
+    };
+
+# Commands that appear together in examples co-occur.
+rule commands-co-occur:
+    when {
+        $ex isa example;
+        (demonstration: $ex, subject: $c1) isa demonstrates;
+        (demonstration: $ex, subject: $c2) isa demonstrates;
+        not { $c1 is $c2; };
+    } then {
+        (companion: $c1, companion: $c2) isa co-occurs;
+    };

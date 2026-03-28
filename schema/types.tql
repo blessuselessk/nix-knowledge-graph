@@ -1,0 +1,132 @@
+define
+
+# Core entities
+
+package sub entity,
+    owns attr-path @key,
+    owns pname,
+    owns version,
+    owns description,
+    owns long-description,
+    owns homepage,
+    owns license,
+    owns store-path;
+
+command sub entity,
+    owns name @key,
+    owns synopsis;
+
+file-entry sub entity,
+    owns file-path @key;
+
+# Documentation entities
+
+man-page sub entity,
+    owns man-id @key,
+    owns section-number,
+    owns raw-content;
+
+man-section sub entity,
+    owns section-id @key,
+    owns heading,
+    owns content,
+    owns section-type;
+
+flag sub entity,
+    owns flag-id @key,
+    owns flag-name,
+    owns short-form,
+    owns flag-description;
+
+# Example/cheatsheet entities
+
+example sub entity,
+    owns example-id @key,
+    owns source-type,
+    owns code,
+    owns example-description,
+    owns tags;
+
+# Attribute types
+
+attr-path sub attribute, value string;
+pname sub attribute, value string;
+version sub attribute, value string;
+description sub attribute, value string;
+long-description sub attribute, value string;
+homepage sub attribute, value string;
+license sub attribute, value string;
+store-path sub attribute, value string;
+name sub attribute, value string;
+synopsis sub attribute, value string;
+file-path sub attribute, value string;
+man-id sub attribute, value string;
+section-number sub attribute, value string;
+raw-content sub attribute, value string;
+section-id sub attribute, value string;
+heading sub attribute, value string;
+content sub attribute, value string;
+section-type sub attribute, value string;
+flag-id sub attribute, value string;
+flag-name sub attribute, value string;
+short-form sub attribute, value string;
+flag-description sub attribute, value string;
+example-id sub attribute, value string;
+source-type sub attribute, value string;
+code sub attribute, value string;
+example-description sub attribute, value string;
+tags sub attribute, value string;
+
+# Relations
+
+provides sub relation,
+    relates provider,
+    relates artifact;
+
+package plays provides:provider;
+command plays provides:artifact;
+file-entry plays provides:artifact;
+
+depends-on sub relation,
+    relates dependent,
+    relates dependency;
+
+package plays depends-on:dependent;
+package plays depends-on:dependency;
+
+documents sub relation,
+    relates documentation,
+    relates subject;
+
+man-page plays documents:documentation;
+man-section plays documents:documentation;
+command plays documents:subject;
+flag plays documents:subject;
+package plays documents:subject;
+
+has-section sub relation,
+    relates whole,
+    relates part;
+
+man-page plays has-section:whole;
+man-section plays has-section:part;
+
+has-flag sub relation,
+    relates owner,
+    relates option;
+
+command plays has-flag:owner;
+flag plays has-flag:option;
+
+demonstrates sub relation,
+    relates demonstration,
+    relates subject;
+
+example plays demonstrates:demonstration;
+command plays demonstrates:subject;
+
+co-occurs sub relation,
+    relates companion,
+    relates companion;
+
+command plays co-occurs:companion;
