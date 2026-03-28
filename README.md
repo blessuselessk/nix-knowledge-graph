@@ -54,13 +54,36 @@ To stop TypeDB:
 nix run github:blessuselessk/nix-knowledge-graph#stop
 ```
 
+Then generate embeddings and search:
+
+```bash
+nix run github:blessuselessk/nix-knowledge-graph#embed
+nix run github:blessuselessk/nix-knowledge-graph#search -- "process JSON on the command line"
+```
+
+### All apps
+
+| App | Description |
+|-----|-------------|
+| `nix run .` | Show status and diagnostics |
+| `nix run .#setup` | Start TypeDB, fetch sources, ingest everything |
+| `nix run .#embed` | Generate embeddings (llamafile + nomic-embed-text) |
+| `nix run .#search -- "query"` | Semantic + graph search |
+| `nix run .#stop` | Stop TypeDB |
+
 ### Development
 
 ```bash
 nix develop
 # Then run ingesters individually:
 python ingest/rippkgs.py
+python ingest/nix_index.py
 python ingest/tldr.py
+python ingest/cheat.py
+python ingest/navi.py
+python ingest/man_pages.py /usr/share/man
+python embed/generate.py
+python query/search.py "download files from the internet"
 ```
 
 ## TypeDB schema
@@ -76,10 +99,11 @@ Core relations: `provides`, `depends-on`, `documents`, `demonstrates`, `co-occur
 - [x] Project scaffold, TypeDB schema, Docker setup
 - [x] rippkgs ingester (package metadata + dependencies)
 - [x] tldr ingester (command examples)
-- [ ] nix-index ingester (file listings)
-- [ ] man page ingester
-- [ ] cheat.sh ingester
-- [ ] navi ingester
-- [ ] Embedding pipeline (llamafile + nomic-embed-text)
-- [ ] Query interface (hybrid graph + vector search)
+- [x] nix-index ingester (file listings → commands, libs, man page paths)
+- [x] man page ingester (troff parsing → sections, flags)
+- [x] cheat.sh ingester (community cheatsheets)
+- [x] navi ingester (parameterized cheatsheets, pipeline extraction)
+- [x] Embedding pipeline (llamafile + nomic-embed-text-v1.5 → sqlite)
+- [x] Query interface (hybrid cosine similarity + TypeDB graph enrichment)
 - [ ] Package TypeDB for Nix (phase B)
+- [ ] sqlite-vec for indexed nearest-neighbor (currently brute-force)

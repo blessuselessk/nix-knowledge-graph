@@ -41,6 +41,7 @@
               pkgs.python3
               pkgs.git
               pkgs.curl
+              pkgs.nix-index
               rippkgs.packages.${system}.rippkgs-index
             ];
             text = ''
@@ -82,7 +83,7 @@
               VENV="$NKG_DATA/.venv"
               if [ ! -d "$VENV" ]; then
                 python3 -m venv "$VENV"
-                "$VENV/bin/pip" install -q typedb-driver rich
+                "$VENV/bin/pip" install -q typedb-driver rich requests
               fi
               PYTHON="$VENV/bin/python"
 
@@ -122,11 +123,60 @@
               echo "==> Ingesting tldr pages..."
               "$PYTHON" ${ingestDir}/tldr.py "$TLDR_DIR"
 
+              # --- nix-index ---
+              echo ""
+              echo "==> Ingesting nix-index file listings..."
+              "$PYTHON" ${ingestDir}/nix_index.py
+
+              # --- cheat.sh ---
+              echo ""
+              CHEAT_DIR="$NKG_DATA/cheat.sheets"
+              if [ -d "$CHEAT_DIR/sheets" ]; then
+                echo "==> cheat.sheets exist at $CHEAT_DIR"
+              else
+                echo "==> Cloning cheat.sheets..."
+                git clone --depth=1 https://github.com/chubin/cheat.sheets.git "$CHEAT_DIR"
+              fi
+              echo "==> Ingesting cheat.sh sheets..."
+              "$PYTHON" ${ingestDir}/cheat.py "$CHEAT_DIR/sheets/_default"
+
+              # --- navi ---
+              echo ""
+              NAVI_DIR="$NKG_DATA/navi-cheats"
+              if [ -d "$NAVI_DIR" ]; then
+                echo "==> navi cheats exist at $NAVI_DIR"
+              else
+                echo "==> Cloning navi cheats..."
+                git clone --depth=1 https://github.com/denisidoro/cheats.git "$NAVI_DIR"
+              fi
+              echo "==> Ingesting navi cheats..."
+              "$PYTHON" ${ingestDir}/navi.py "$NAVI_DIR"
+
+              # --- man pages ---
+              echo ""
+              echo "==> Ingesting man pages..."
+              MAN_DIR=""
+              if [ -d "/run/current-system/sw/share/man" ]; then
+                MAN_DIR="/run/current-system/sw/share/man"
+              elif [ -d "$HOME/.nix-profile/share/man" ]; then
+                MAN_DIR="$HOME/.nix-profile/share/man"
+              elif [ -d "/usr/share/man" ]; then
+                MAN_DIR="/usr/share/man"
+              fi
+              if [ -n "$MAN_DIR" ]; then
+                "$PYTHON" ${ingestDir}/man_pages.py "$MAN_DIR"
+              else
+                echo "    No man pages directory found, skipping"
+              fi
+
               echo ""
               echo "==> Setup complete!"
-              echo "    TypeDB:  localhost:1729"
+              echo "    TypeDB:   localhost:1729"
               echo "    Database: nix-knowledge-graph"
-              echo "    Data:    $NKG_DATA"
+              echo "    Data:     $NKG_DATA"
+              echo ""
+              echo "    Next: nix run .#embed   to generate embeddings"
+              echo "          nix run .#search  to query"
             '';
           };
 
@@ -261,6 +311,8 @@
 
               echo ""
               echo "  nix run .#setup   set up / ingest all sources"
+              echo "  nix run .#embed   generate embeddings"
+              echo "  nix run .#search  query the knowledge graph"
               echo "  nix run .#stop    stop TypeDB"
             '';
           };
@@ -272,6 +324,48 @@
               echo "Stopping TypeDB..."
               docker stop nkg-typedb > /dev/null 2>&1 && docker rm nkg-typedb > /dev/null 2>&1 || true
               echo "Done."
+            '';
+          };
+
+          nkg-embed = pkgs.writeShellApplication {
+            name = "nkg-embed";
+            runtimeInputs = [ pkgs.python3 pkgs.curl ];
+            text = ''
+              NKG_DATA="''${XDG_DATA_HOME:-$HOME/.local/share}/nix-knowledge-graph"
+              VENV="$NKG_DATA/.venv"
+
+              if [ ! -d "$VENV" ]; then
+                echo "Run nix run .#setup first"
+                exit 1
+              fi
+
+              export TYPEDB_ADDRESS="localhost:1729"
+              export NKG_DATABASE="nix-knowledge-graph"
+              export NKG_DATA_DIR="$NKG_DATA"
+              export LLAMAFILE_PORT="8080"
+
+              "$VENV/bin/python" ${./embed}/generate.py "$@"
+            '';
+          };
+
+          nkg-search = pkgs.writeShellApplication {
+            name = "nkg-search";
+            runtimeInputs = [ pkgs.python3 ];
+            text = ''
+              NKG_DATA="''${XDG_DATA_HOME:-$HOME/.local/share}/nix-knowledge-graph"
+              VENV="$NKG_DATA/.venv"
+
+              if [ ! -d "$VENV" ]; then
+                echo "Run nix run .#setup first"
+                exit 1
+              fi
+
+              export TYPEDB_ADDRESS="localhost:1729"
+              export NKG_DATABASE="nix-knowledge-graph"
+              export NKG_DATA_DIR="$NKG_DATA"
+              export LLAMAFILE_PORT="8080"
+
+              "$VENV/bin/python" ${./query}/search.py "$@"
             '';
           };
         in
@@ -292,6 +386,14 @@
             type = "app";
             program = "${nkg-stop}/bin/nkg-stop";
           };
+          embed = {
+            type = "app";
+            program = "${nkg-embed}/bin/nkg-embed";
+          };
+          search = {
+            type = "app";
+            program = "${nkg-search}/bin/nkg-search";
+          };
         }
       );
 
@@ -310,13 +412,14 @@
               pkgs.sqlite
               pkgs.jq
               pkgs.docker-compose
+              pkgs.nix-index
               pkgs.tldr
             ];
 
             shellHook = ''
               if [ ! -d .venv ]; then
                 python -m venv .venv
-                .venv/bin/pip install -q typedb-driver rich
+                .venv/bin/pip install -q typedb-driver rich requests
               fi
               source .venv/bin/activate
 
