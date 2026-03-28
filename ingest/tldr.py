@@ -9,6 +9,7 @@ Usage:
 If no path given, clones tldr-pages/tldr from GitHub.
 """
 
+import os
 import re
 import sys
 import subprocess
@@ -18,10 +19,10 @@ from hashlib import sha256
 from typedb.driver import TypeDB, SessionType, TransactionType
 
 
-TYPEDB_ADDRESS = "localhost:1729"
-DATABASE = "nix-knowledge-graph"
+TYPEDB_ADDRESS = os.environ.get("TYPEDB_ADDRESS", "localhost:1729")
+DATABASE = os.environ.get("NKG_DATABASE", "nix-knowledge-graph")
 TLDR_REPO = "https://github.com/tldr-pages/tldr.git"
-TLDR_DIR = Path("data/tldr")
+TLDR_DIR = Path(os.environ.get("NKG_DATA_DIR", "data")) / "tldr"
 BATCH_SIZE = 50
 
 

@@ -30,18 +30,31 @@ TypeDB stores the full knowledge graph with typed entities and relations. Embedd
 
 ## Quick start
 
+One command sets up everything — starts TypeDB, generates the rippkgs index, clones tldr-pages, and ingests all sources:
+
 ```bash
-# Enter dev shell
+nix run github:blessuselessk/nix-knowledge-graph
+```
+
+This will:
+1. Start TypeDB 3.8.2 in Docker (`nkg-typedb` container)
+2. Create a Python venv with `typedb-driver`
+3. Generate the rippkgs index (~5 min, evaluates nixpkgs)
+4. Clone tldr-pages
+5. Ingest everything into TypeDB
+
+Data is stored in `~/.local/share/nix-knowledge-graph/`.
+
+To stop TypeDB:
+```bash
+nix run github:blessuselessk/nix-knowledge-graph#stop
+```
+
+### Development
+
+```bash
 nix develop
-
-# Start TypeDB
-docker compose up -d
-
-# Generate rippkgs index (takes ~5 min, evaluates nixpkgs)
-mkdir -p data
-rippkgs-index nixpkgs -o data/rippkgs-index.sqlite
-
-# Ingest into TypeDB
+# Then run ingesters individually:
 python ingest/rippkgs.py
 python ingest/tldr.py
 ```

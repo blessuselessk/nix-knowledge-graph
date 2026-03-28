@@ -13,15 +13,17 @@ Usage:
 
 import sqlite3
 import json
+import os
 import sys
 from pathlib import Path
 
 from typedb.driver import TypeDB, SessionType, TransactionType
 
 
-TYPEDB_ADDRESS = "localhost:1729"
-DATABASE = "nix-knowledge-graph"
-RIPPKGS_DB = Path("data/rippkgs-index.sqlite")
+TYPEDB_ADDRESS = os.environ.get("TYPEDB_ADDRESS", "localhost:1729")
+DATABASE = os.environ.get("NKG_DATABASE", "nix-knowledge-graph")
+SCHEMA_DIR = Path(os.environ.get("NKG_SCHEMA_DIR", "schema"))
+RIPPKGS_DB = Path(os.environ.get("NKG_RIPPKGS_DB", "data/rippkgs-index.sqlite"))
 BATCH_SIZE = 50
 
 
@@ -36,8 +38,8 @@ def create_database(driver):
 
     # Load schema
     with driver.session(DATABASE, SessionType.SCHEMA) as session:
-        for schema_file in ["schema/types.tql", "schema/rules.tql"]:
-            path = Path(schema_file)
+        for schema_file in [SCHEMA_DIR / "types.tql", SCHEMA_DIR / "rules.tql"]:
+            path = schema_file
             if not path.exists():
                 print(f"  Skipping {schema_file} (not found)")
                 continue
