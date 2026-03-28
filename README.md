@@ -33,7 +33,7 @@ TypeDB stores the full knowledge graph with typed entities and relations. Embedd
 One command sets up everything — starts TypeDB, generates the rippkgs index, clones tldr-pages, and ingests all sources:
 
 ```bash
-nix run github:blessuselessk/nix-knowledge-graph
+nix run github:blessuselessk/nix-knowledge-graph#setup
 ```
 
 This will:

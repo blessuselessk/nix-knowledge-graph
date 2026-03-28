@@ -145,6 +145,10 @@
             type = "app";
             program = "${nkg-setup}/bin/nkg-setup";
           };
+          setup = {
+            type = "app";
+            program = "${nkg-setup}/bin/nkg-setup";
+          };
           stop = {
             type = "app";
             program = "${nkg-stop}/bin/nkg-stop";
